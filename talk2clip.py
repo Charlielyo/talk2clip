@@ -30,6 +30,7 @@ MIN_SEC = 0.3                     # 最短有效音频
 LANG = "zh"                       # whisper 语言
 MODEL = "base"                    # 模型大小: tiny/base/small/medium（越大越准越慢）
 HF_ENDPOINT = "https://hf-mirror.com"  # HuggingFace 镜像（国内直连 huggingface.co 会 429）
+AUTO_PASTE = True                 # 松手识别后自动粘贴到光标处（需辅助功能授权；失败则仅剪贴板）
 
 # ═══ 依赖导入（缺失时给出安装提示）═══
 try:
@@ -143,6 +144,18 @@ def copy_to_clipboard(text: str):
     return p.returncode == 0
 
 
+def paste_at_cursor():
+    """把剪贴板内容粘贴到当前光标处（Cmd+V，需终端/进程有辅助功能授权）"""
+    try:
+        r = subprocess.run(
+            ["osascript", "-e",
+             'tell application "System Events" to keystroke "v" using {command down}'],
+            capture_output=True, timeout=5)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def notify(text: str):
     """终端 + 系统通知双提示"""
     print(f"📋 已复制到剪贴板: {text}", flush=True)
@@ -172,6 +185,11 @@ def record_worker():
         text = transcribe(audio)
         if text and copy_to_clipboard(text):
             notify(text)
+            if AUTO_PASTE:
+                ok = paste_at_cursor()
+                if not ok:
+                    print("⚠ 自动粘贴失败（需给终端授权「辅助功能」），已复制到剪贴板可手动 Cmd+V",
+                          flush=True)
     except Exception as e:
         print(f"❌ 出错: {e}", flush=True)
     finally:
