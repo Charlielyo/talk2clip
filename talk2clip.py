@@ -185,78 +185,31 @@ def stop_capture():
 
 recording = False
 
-# ═══ 热键（右 Command 按住说话；ctypes+Quartz，与 pynput 同一底层路径）═══
-_cb_refs = []   # 保持 C 回调对象引用，防 GC
-_q = None       # Quartz 库句柄（懒加载）
-
-
-def _quartz():
-    global _q
-    if _q is None:
-        from ctypes import CDLL
-        _q = CDLL("/System/Library/Frameworks/Quartz.framework/Quartz")
-    return _q
-
-
+# ═══ 热键（右 Command 按住说话；pynput 原生支持 Key.cmd_r 区分左右⌘）═══
 def start_hotkey():
-    """监听右 ⌘(keycode 54)：FlagsChanged 事件 + 按下=开录，松开=识别"""
     try:
-        from ctypes import CFUNCTYPE, byref, c_int64, c_uint32, c_void_p
-        from ctypes import CDLL
-    except Exception as e:
-        print(f"⚠ ctypes 不可用: {e}", flush=True)
+        from pynput import keyboard
+    except ImportError:
+        print("⚠ 缺少 pynput（pip install pynput）", flush=True)
         return None
 
-    q = _quartz()
-    cf = CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+    key = keyboard.Key.cmd_r   # 右 Command（keycode 54）
 
-    # ── 常量 ──
-    kCGSessionEventTap = 1
-    kCGHeadInsertEventTap = 0
-    kCGEventFlagsChanged = 14          # 修饰键（⌘⇧⌥⌃）只发这个事件
-    kCGKeyboardEventKeycode = 9
-    kCGEventFlagMaskCommand = 1 << 20
-    R_CMD = 54                          # 右 Command 的 keycode
+    pressed = [False]
 
-    # ── 函数签名 ──
-    q.CGEventTapCreate.restype = c_void_p
-    q.CGEventTapCreate.argtypes = [c_uint32, c_uint32, c_uint32, c_int64, c_void_p, c_void_p]
-    q.CGEventGetIntegerValueField.restype = c_int64
-    q.CGEventGetIntegerValueField.argtypes = [c_void_p, c_uint32]
-    q.CGEventGetFlags.restype = c_int64
-    q.CGEventGetFlags.argtypes = [c_void_p]
-    cf.CFMachPortCreateRunLoopSource.restype = c_void_p
-    cf.CFMachPortCreateRunLoopSource.argtypes = [c_void_p, c_void_p, c_int64]
-    cf.CFRunLoopGetCurrent.restype = c_void_p
-    cf.CFRunLoopAddSource.argtypes = [c_void_p, c_void_p, c_void_p]
+    def on_press(k):
+        if not pressed[0] and k == key:
+            pressed[0] = True
+            start_capture()
 
-    @CFUNCTYPE(c_void_p, c_void_p, c_uint32, c_void_p, c_void_p)
-    def _cb(proxy, etype, event, user_data):
-        try:
-            if etype != kCGEventFlagsChanged:
-                return event
-            code = q.CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
-            if code != R_CMD:
-                return event
-            if q.CGEventGetFlags(event) & kCGEventFlagMaskCommand:
-                start_capture()     # 按下右 ⌘
-            else:
-                stop_capture()      # 松开右 ⌘
-        except Exception as e:
-            print("热键回调错误:", e, flush=True)
-        return event   # 不拦截，继续传递
+    def on_release(k):
+        if pressed[0] and k == key:
+            pressed[0] = False
+            stop_capture()
 
-    mask = 1 << kCGEventFlagsChanged
-    tap = q.CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap,
-                             0, mask, _cb, None)
-    if not tap:
-        print("⚠ 无法创建键盘监听（需「输入监控」权限，见 README）", flush=True)
-        return None
-
-    source = cf.CFMachPortCreateRunLoopSource(None, tap, 0)
-    cf.CFRunLoopAddSource(cf.CFRunLoopGetCurrent(), source, None)  # default mode
-    _cb_refs.extend([_cb, tap, source])   # 防 GC
-    return tap
+    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+    listener.start()
+    return listener
 
 
 # ═══ 菜单栏图标（rumps，可选）═══
