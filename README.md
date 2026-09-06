@@ -1,6 +1,6 @@
 # talk2clip
 
-按住 `Option+Shift+Space` 说话，松开自动转成文字并复制到剪贴板（macOS）。
+按住 `Option(⌥)+Space` 说话，松开自动转成文字并复制到剪贴板（macOS）。
 
 - 识别走本地 [faster-whisper](https://github.com/SYSTRAN/faster-whisper)（离线、免费、不限量）
 - 输出走 `pbcopy`（macOS 自带剪贴板，**无需任何权限**）
@@ -24,7 +24,7 @@ python3 talk2clip.py --once # 无界面：等一次按键后自动退出
 
 | 操作 | 效果 |
 |---|---|
-| 按住 `Option+Shift+Space` 说话，松开 | 识别 → 复制到剪贴板 + 系统通知 |
+| 按住 `Option(⌥)+Space` 说话，松开 | 识别 → 复制到剪贴板 + 系统通知 |
 | 说话停顿 1.2 秒 | 自动停止并识别（不用松手） |
 | 点击菜单栏 🎙️ → 开始说话 / 停止 | 鼠标方式说话（热键失效时的备用） |
 | 播放/播报时再按热键 | （当前为单次任务，安全） |

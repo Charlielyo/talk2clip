@@ -19,7 +19,7 @@ import time
 import wave
 
 # ═══ 配置（写死的最小化配置，可自行修改）═══
-HK_MODS = ("option", "shift")     # 热键修饰键
+HK_MODS = ("option",)              # 热键修饰键（按住即可，无需额外组合）
 HK_KEY = "space"                  # 热键主键
 RATE = 16000                      # 采样率
 MAX_SEC = 30                      # 最长录音
