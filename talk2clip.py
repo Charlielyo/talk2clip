@@ -28,7 +28,10 @@ NOISE_THRESH = 0.015              # 开始说话的阈值
 SILENCE_THRESH = 0.008            # 静音阈值
 MIN_SEC = 0.3                     # 最短有效音频
 LANG = "zh"                       # whisper 语言
-MODEL = "base"                    # 模型大小: tiny/base/small/medium（越大越准越慢）
+MODEL = "small"                   # 模型大小: tiny/base/small/medium（越大越准越慢）
+BEAM_SIZE = 5                     # 解码搜索宽度，越大越准（5=准，1=快）
+INITIAL_PROMPT = "以下是普通话的句子。"  # 提示词：减少繁体/英文误输出，提升中文倾向
+TO_SIMPLIFIED = True              # 繁体→简体（whisper 常输出繁体，opencc 转换）
 HF_ENDPOINT = "https://hf-mirror.com"  # HuggingFace 镜像（国内直连 huggingface.co 会 429）
 AUTO_PASTE = True                 # 松手识别后自动粘贴到光标处（需辅助功能授权；失败则仅剪贴板）
 
@@ -134,8 +137,27 @@ def transcribe(audio) -> str:
     # faster-whisper 原生接受 float32 numpy 数组（16kHz 单声道）
     segs, _ = get_model().transcribe(
         np.asarray(audio, dtype=np.float32).reshape(-1),
-        language=LANG, beam_size=1, vad_filter=True)
-    return "".join(s.text for s in segs).strip()
+        language=LANG, beam_size=BEAM_SIZE, vad_filter=True,
+        initial_prompt=INITIAL_PROMPT)
+    text = "".join(s.text for s in segs).strip()
+    if TO_SIMPLIFIED:
+        try:
+            text = _to_simplified(text)
+        except Exception:
+            pass  # opencc 不可用时保留原结果
+    return text
+
+
+def _to_simplified(text: str) -> str:
+    """繁体→简体（whisper 常输出繁体，用户输入界面多为简体）"""
+    global _opencc
+    if _opencc is None:
+        from opencc import OpenCC
+        _opencc = OpenCC("t2s")
+    return _opencc.convert(text)
+
+
+_opencc = None
 
 
 # ═══ 输出到剪贴板 ═══
