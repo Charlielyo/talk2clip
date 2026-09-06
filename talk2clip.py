@@ -81,12 +81,17 @@ def get_model():
 
 
 # ═══ 录音 ═══
-def record_once() -> bytes | None:
-    """按住说话：返回 PCM wav 字节；取消/失败返回 None。"""
+_stop_flag = {"stop": False}   # 全局停止标志：松手时置 True，立即结束录音
+_min_sec = RATE * MIN_SEC      # 最短有效音频（帧数）
+
+
+def record_once():
+    """按住说话：返回 numpy 音频；松开（stop_capture）或静音超时自动结束。"""
     import sounddevice as sd
     buf = []
-    state = {"stop": False, "started": False}
+    state = {"started": False}
     silent_at = None
+    _stop_flag["stop"] = False   # 每次开始录音重置
 
     def cb(indata, frames, t, status):
         buf.append(indata.copy())
@@ -98,17 +103,17 @@ def record_once() -> bytes | None:
             if silent_at is None:
                 silent_at = time.time()
 
-    print("🎙️ 录音中…（松开发送 / 静音自动断）", flush=True)
+    print("🎙️ 录音中…（松手即发送 / 静音自动断）", flush=True)
     deadline = time.time() + MAX_SEC
     with sd.InputStream(samplerate=RATE, channels=1, dtype="float32", callback=cb):
-        while not state["stop"] and time.time() < deadline:
+        while not _stop_flag["stop"] and time.time() < deadline:
             time.sleep(0.05)
             if silent_at and time.time() - silent_at > SILENCE_SEC:
                 break
     if not buf:
         return None
     audio = np.concatenate(buf, axis=0)
-    if len(audio) < RATE * MIN_SEC:
+    if len(audio) < _min_sec:
         print("（太短，忽略）", flush=True)
         return None
     return audio
@@ -150,7 +155,7 @@ def notify(text: str):
 
 
 # ═══ 主流程（按键按下=开录，按键松开=识别）═══
-def on_press():
+def start_capture():
     threading.Thread(target=record_worker, daemon=True).start()
 
 
@@ -172,10 +177,9 @@ def record_worker():
         recording = False
 
 
-def on_release():
-    global recording
-    # 松手即停：通过取消标志实现（当前实现靠静音检测，此处留兼容钩子）
-    pass
+def stop_capture():
+    """松手即停：置停止标志，录音循环立即结束并开始识别"""
+    _stop_flag["stop"] = True
 
 
 recording = False
@@ -198,13 +202,13 @@ def start_hotkey():
         down.add(k)
         if not pressed[0] and k == key and {mods[m] for m in HK_MODS if m in mods} <= down:
             pressed[0] = True
-            on_press()
+            start_capture()
 
     def on_release(k):
         down.discard(k)
         if pressed[0] and k == key:
             pressed[0] = False
-            on_release()
+            stop_capture()
 
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
@@ -229,10 +233,10 @@ def start_menu():
             ]
 
         def _start(self, _):
-            on_press()
+            start_capture()
 
         def _stop(self, _):
-            on_release()
+            stop_capture()
 
         def _exit(self, _):
             rumps.quit_application()
