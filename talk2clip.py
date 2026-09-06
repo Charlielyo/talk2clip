@@ -185,48 +185,77 @@ def stop_capture():
 
 recording = False
 
-# ═══ 热键（右 Command 按住说话；Quartz 事件监听精确区分左右⌘）═══
+# ═══ 热键（右 Command 按住说话；ctypes+Quartz，与 pynput 同一底层路径）═══
 _cb_refs = []   # 保持 C 回调对象引用，防 GC
+_q = None       # Quartz 库句柄（懒加载）
+
+
+def _quartz():
+    global _q
+    if _q is None:
+        from ctypes import CDLL
+        _q = CDLL("/System/Library/Frameworks/Quartz.framework/Quartz")
+    return _q
 
 
 def start_hotkey():
+    """监听右 ⌘(keycode 54)：FlagsChanged 事件 + 按下=开录，松开=识别"""
     try:
-        import Quartz
-    except ImportError:
-        print("⚠ 缺少 Quartz(PyObjC)，无法使用热键（pip install pyobjc-framework-Quartz）")
+        from ctypes import CFUNCTYPE, byref, c_int64, c_uint32, c_void_p
+        from ctypes import CDLL
+    except Exception as e:
+        print(f"⚠ ctypes 不可用: {e}", flush=True)
         return None
 
-    R_CMD = 54   # macOS keycode: 右 Command
+    q = _quartz()
+    cf = CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
 
-    def _cb(proxy, etype, event, ud):
+    # ── 常量 ──
+    kCGSessionEventTap = 1
+    kCGHeadInsertEventTap = 0
+    kCGEventFlagsChanged = 14          # 修饰键（⌘⇧⌥⌃）只发这个事件
+    kCGKeyboardEventKeycode = 9
+    kCGEventFlagMaskCommand = 1 << 20
+    R_CMD = 54                          # 右 Command 的 keycode
+
+    # ── 函数签名 ──
+    q.CGEventTapCreate.restype = c_void_p
+    q.CGEventTapCreate.argtypes = [c_uint32, c_uint32, c_uint32, c_int64, c_void_p, c_void_p]
+    q.CGEventGetIntegerValueField.restype = c_int64
+    q.CGEventGetIntegerValueField.argtypes = [c_void_p, c_uint32]
+    q.CGEventGetFlags.restype = c_int64
+    q.CGEventGetFlags.argtypes = [c_void_p]
+    cf.CFMachPortCreateRunLoopSource.restype = c_void_p
+    cf.CFMachPortCreateRunLoopSource.argtypes = [c_void_p, c_void_p, c_int64]
+    cf.CFRunLoopGetCurrent.restype = c_void_p
+    cf.CFRunLoopAddSource.argtypes = [c_void_p, c_void_p, c_void_p]
+
+    @CFUNCTYPE(c_void_p, c_void_p, c_uint32, c_void_p, c_void_p)
+    def _cb(proxy, etype, event, user_data):
         try:
-            code = Quartz.CGEventGetIntegerValueField(
-                event, Quartz.kCGKeyboardEventKeycode)
-            if code == R_CMD:
-                if etype == Quartz.kCGEventKeyDown:
-                    start_capture()
-                elif etype == Quartz.kCGEventKeyUp:
-                    stop_capture()
+            if etype != kCGEventFlagsChanged:
+                return event
+            code = q.CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
+            if code != R_CMD:
+                return event
+            if q.CGEventGetFlags(event) & kCGEventFlagMaskCommand:
+                start_capture()     # 按下右 ⌘
+            else:
+                stop_capture()      # 松开右 ⌘
         except Exception as e:
             print("热键回调错误:", e, flush=True)
-        return event   # 不拦截，继续传递给系统
+        return event   # 不拦截，继续传递
 
-    mask = (Quartz.CGEventMaskBit(Quartz.kCGEventKeyDown)
-            | Quartz.CGEventMaskBit(Quartz.kCGEventKeyUp))
-    tap = Quartz.CGEventTapCreate(
-        Quartz.kCGSessionEventTap, Quartz.kCGHeadInsertEventTap,
-        Quartz.kCGEventTapOptionDefault, mask, _cb, None)
+    mask = 1 << kCGEventFlagsChanged
+    tap = q.CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap,
+                             0, mask, _cb, None)
     if not tap:
-        print("⚠ 无法创建键盘监听（需要给终端授予「输入监控」权限）", flush=True)
+        print("⚠ 无法创建键盘监听（需「输入监控」权限，见 README）", flush=True)
         return None
 
-    source = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
-    Quartz.CFRunLoopAddSource(Quartz.CFRunLoopGetCurrent(),
-                              source, Quartz.kCFRunLoopCommonModes)
-    Quartz.CGEventTapEnable(tap, True)
-    _cb_refs.append(_cb)   # 防 GC
-    _cb_refs.append(tap)
-    _cb_refs.append(source)
+    source = cf.CFMachPortCreateRunLoopSource(None, tap, 0)
+    cf.CFRunLoopAddSource(cf.CFRunLoopGetCurrent(), source, None)  # default mode
+    _cb_refs.extend([_cb, tap, source])   # 防 GC
     return tap
 
 
