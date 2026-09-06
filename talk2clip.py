@@ -86,11 +86,10 @@ _min_sec = RATE * MIN_SEC      # 最短有效音频（帧数）
 
 
 def record_once():
-    """按住说话：返回 numpy 音频；松开（stop_capture）或静音超时自动结束。"""
+    """按住说话：返回 1D numpy 音频；松开（stop_capture）或静音超时自动结束。"""
     import sounddevice as sd
     buf = []
-    state = {"started": False}
-    silent_at = None
+    state = {"started": False, "silent_at": None}   # 可变状态放 dict，回调内外共享
     _stop_flag["stop"] = False   # 每次开始录音重置
 
     def cb(indata, frames, t, status):
@@ -98,21 +97,22 @@ def record_once():
         rms = float(np.sqrt(np.mean(indata ** 2)))
         if rms > NOISE_THRESH:
             state["started"] = True
-            silent_at = None
+            state["silent_at"] = None
         elif state["started"] and rms < SILENCE_THRESH:
-            if silent_at is None:
-                silent_at = time.time()
+            if state["silent_at"] is None:
+                state["silent_at"] = time.time()
 
-    print("🎙️ 录音中…（松手即发送 / 静音自动断）", flush=True)
+    print("🎙️ 录音中…（松开右⌘即发送 / 静音自动断）", flush=True)
     deadline = time.time() + MAX_SEC
     with sd.InputStream(samplerate=RATE, channels=1, dtype="float32", callback=cb):
         while not _stop_flag["stop"] and time.time() < deadline:
             time.sleep(0.05)
-            if silent_at and time.time() - silent_at > SILENCE_SEC:
+            sa = state["silent_at"]
+            if sa and time.time() - sa > SILENCE_SEC:
                 break
     if not buf:
         return None
-    audio = np.concatenate(buf, axis=0)
+    audio = np.concatenate(buf, axis=0).reshape(-1)   # 压平为 1D
     if len(audio) < _min_sec:
         print("（太短，忽略）", flush=True)
         return None
@@ -132,7 +132,8 @@ def to_wav_bytes(audio) -> bytes:
 def transcribe(audio) -> str:
     # faster-whisper 原生接受 float32 numpy 数组（16kHz 单声道）
     segs, _ = get_model().transcribe(
-        audio.astype(np.float32), language=LANG, beam_size=1, vad_filter=True)
+        np.asarray(audio, dtype=np.float32).reshape(-1),
+        language=LANG, beam_size=1, vad_filter=True)
     return "".join(s.text for s in segs).strip()
 
 
@@ -184,35 +185,49 @@ def stop_capture():
 
 recording = False
 
-# ═══ 热键（优先 pynput；失败提示备用方式）═══
+# ═══ 热键（右 Command 按住说话；Quartz 事件监听精确区分左右⌘）═══
+_cb_refs = []   # 保持 C 回调对象引用，防 GC
+
+
 def start_hotkey():
-    from pynput import keyboard
-    mods = {
-        "ctrl": keyboard.Key.ctrl, "control": keyboard.Key.ctrl,
-        "shift": keyboard.Key.shift,
-        "alt": keyboard.Key.alt, "option": keyboard.Key.alt,
-        "cmd": keyboard.Key.cmd, "command": keyboard.Key.cmd,
-    }
-    key = getattr(keyboard.Key, HK_KEY, keyboard.Key.space)
+    try:
+        import Quartz
+    except ImportError:
+        print("⚠ 缺少 Quartz(PyObjC)，无法使用热键（pip install pyobjc-framework-Quartz）")
+        return None
 
-    down = set()
-    pressed = [False]
+    R_CMD = 54   # macOS keycode: 右 Command
 
-    def on_press(k):
-        down.add(k)
-        if not pressed[0] and k == key and {mods[m] for m in HK_MODS if m in mods} <= down:
-            pressed[0] = True
-            start_capture()
+    def _cb(proxy, etype, event, ud):
+        try:
+            code = Quartz.CGEventGetIntegerValueField(
+                event, Quartz.kCGKeyboardEventKeycode)
+            if code == R_CMD:
+                if etype == Quartz.kCGEventKeyDown:
+                    start_capture()
+                elif etype == Quartz.kCGEventKeyUp:
+                    stop_capture()
+        except Exception as e:
+            print("热键回调错误:", e, flush=True)
+        return event   # 不拦截，继续传递给系统
 
-    def on_release(k):
-        down.discard(k)
-        if pressed[0] and k == key:
-            pressed[0] = False
-            stop_capture()
+    mask = (Quartz.CGEventMaskBit(Quartz.kCGEventKeyDown)
+            | Quartz.CGEventMaskBit(Quartz.kCGEventKeyUp))
+    tap = Quartz.CGEventTapCreate(
+        Quartz.kCGSessionEventTap, Quartz.kCGHeadInsertEventTap,
+        Quartz.kCGEventTapOptionDefault, mask, _cb, None)
+    if not tap:
+        print("⚠ 无法创建键盘监听（需要给终端授予「输入监控」权限）", flush=True)
+        return None
 
-    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-    listener.start()
-    return listener
+    source = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
+    Quartz.CFRunLoopAddSource(Quartz.CFRunLoopGetCurrent(),
+                              source, Quartz.kCFRunLoopCommonModes)
+    Quartz.CGEventTapEnable(tap, True)
+    _cb_refs.append(_cb)   # 防 GC
+    _cb_refs.append(tap)
+    _cb_refs.append(source)
+    return tap
 
 
 # ═══ 菜单栏图标（rumps，可选）═══
@@ -250,7 +265,7 @@ def main():
     if listener is None:
         print("⚠ 热键启动失败：请先给终端/python3 授权「输入监控」或「辅助功能」")
     else:
-        print(f"✅ 热键已启动：{' + '.join(HK_MODS)} + {HK_KEY} 按住说话，松开复制")
+        print("✅ 热键已启动：按住 右 ⌘ (右Command) 说话，松开复制")
     print("   也可用菜单栏 🎙️ 图标点击说话", flush=True)
 
     if "--once" in sys.argv:
