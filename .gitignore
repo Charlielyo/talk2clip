@@ -1,0 +1,13 @@
+# 模型（380MB+，用户自行下载，见 README「模型」一节）
+models/
+
+# 运行产物
+.talk2clip.pid
+__pycache__/
+*.py[cod]
+
+# 用户配置（含个人词库/偏好，不入库）
+config.json
+
+# macOS
+.DS_Store

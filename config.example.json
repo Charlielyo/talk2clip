@@ -1,0 +1,9 @@
+{
+  "hotkey": "cmd_r",
+  "model": "small",
+  "beam_size": 5,
+  "auto_paste": true,
+  "corrections": {},
+  "auto_lang": false,
+  "add_punct": false
+}

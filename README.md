@@ -1,59 +1,125 @@
-# talk2clip
+# talk2clip 🎙️📋
 
-按住 `右 ⌘`（可在设置界面改）说话，松开自动转文字、进剪贴板并粘贴到光标处（macOS）。
+**Hold right ⌘, speak, release — text lands in your cursor.**
+*(macOS 按住说话 → 本地离线语音识别 → 自动粘贴到光标处)*
 
-- 识别走本地 [faster-whisper](https://github.com/SYSTRAN/faster-whisper)（离线、免费、不限量）
-- 输出走 `pbcopy`（macOS 自带剪贴板，**无需任何权限**）
-- 单文件、无 HTTP 服务、无 AI 对话、无界面依赖
+A lightweight, fully offline, privacy-friendly voice-to-text tool for macOS:
 
-## 依赖
+- 🔥 **Single action**: hold **right ⌘** (or any key you choose) → speak → release → text is inserted at your cursor
+- 🧠 **Local AI recognition** via [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — offline, free, unlimited, no cloud, no API keys
+- 📋 **Clipboard + auto-paste**: text is copied and pasted automatically
+- 🌊 **Visual feedback**: floating wave-bar shows live volume while you speak
+- 🇨🇳↔🇬🇧 **Auto language detect** (optional), **auto punctuation** (optional), **correction dictionary**
+- 🖥️ **Settings GUI**: hotkey / model / dictionary / options, all clickable
+- 🚀 **Launch at login** (optional, via LaunchAgent)
+
+No cloud, no account, no data leaves your Mac.
+
+---
+
+## Quick start
 
 ```bash
-pip install numpy sounddevice faster-whisper pynput rumps
+git clone <this-repo> talk2clip && cd talk2clip
+./install.sh          # creates .venv, installs deps, writes config.json
 ```
 
-首次识别会自动下载 whisper 模型（`small`，约 460MB，之后用缓存）。
-想更轻量可改 `talk2clip.py` 顶部的 `MODEL = "tiny"`（~75MB，更快但中文准确率略低）。
-
-## 使用
+Then **download the model** (~250 MB, one-time, see [Model](#model)):
 
 ```bash
-python3 talk2clip.py        # 常驻：菜单栏出现 🎙️ 图标，按住热键说话
-python3 talk2clip.py --once # 无界面：等一次按键后自动退出
+# Method A — from Azure CDN (works in CN & anywhere):
+curl -L -o /tmp/small.pt 'https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt'
+.venv/bin/python3 convert_pt_to_ct2.py /tmp/small.pt models/faster-whisper-small
+
+# Method B — copy a CT2-format model (e.g. Systran/faster-whisper-small from HuggingFace)
+# into `models/faster-whisper-small/`
 ```
 
-| 操作 | 效果 |
-|---|---|
-| 按住 `Option(⌥)+Space` 说话，松开 | 识别 → 复制到剪贴板 + 系统通知 |
-| 说话停顿 1.2 秒 | 自动停止并识别（不用松手） |
-| 点击菜单栏 🎙️ → 开始说话 / 停止 | 鼠标方式说话（热键失效时的备用） |
-| 播放/播报时再按热键 | （当前为单次任务，安全） |
+### Grant permissions (first run only)
 
-## 与旧 voice-hub (Jarvis) 的区别
-
-| | talk2clip | voice-hub |
+| Permission | Where | What |
 |---|---|---|
-| 功能 | 只做 说话→剪贴板 | 语音打字+AI对话+播报+路由+5种界面 |
-| 依赖 | sounddevice / whisper / pynput / rumps | 全包 + HTTP + 密钥 + hermes |
-| 需要密钥 | 无 | STT/AI 密钥 |
-| 需要网络 | 仅首次下载模型 | 全程 |
-| 代码量 | ~200 行单文件 | 10+ 文件 |
+| 输入监控 | System Settings → Privacy & Security → **Input Monitoring** | Terminal (so hotkey listener works) |
+| 辅助功能 | System Settings → Privacy & Security → **Accessibility** | Terminal + `/usr/bin/osascript` (so auto-paste works) |
 
-## 已知事项（经验教训）
+> **macOS 15 note**: permission for CLI binaries is glitchy (adds but doesn't apply).
+> Run via **Terminal** (`./启动talk2clip.command` or `python3 talk2clip.py`) and grant
+> **Terminal** itself — the child process inherits it. This is the supported path.
 
-- macOS 15 上「辅助功能」授权对 CLI 二进制有系统 bug（面板显示已授权但实际不生效）；
-  键盘监听请从**终端启动**（终端已授权「输入监控」即可继承），或手动给 python 添加「输入监控」权限。
-- 剪贴板写入不需要任何 TCC 权限——这是本设计的关键简化。
-- 启动热键时若看到 `This process is not trusted!` 警告，仍可先测菜单栏 🎙️ 方式。
+### Usage
 
-## 设置界面
+| Action | How |
+|---|---|
+| Speak → text | Hold **right ⌘**, say something, release — text appears at cursor |
+| Change hotkey / model / dictionary | Double-click `打开设置.command` (or `python3 settings.py`) |
+| Start | Double-click `启动talk2clip.command`, or enable login-autostart (see below) |
+| Quit | `pkill -f talk2clip.py` |
 
-```bash
-python3 settings.py     # 打开设置窗口
+*Hotkey options: right ⌘ / right ⌥ / right ⌃ / right ⇧ / ⌘ / ⌥ / ⌃ / Space / F5-F20 (config.json `hotkey`).*
+
+---
+
+## Features & config (`config.json`)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `hotkey` | `cmd_r` | pynput Key name, e.g. `alt_r` = right Option |
+| `model` | `small` | tiny / base / small / medium (bigger = better, slower) |
+| `beam_size` | `5` | decode beam (5 = accurate, 1 = fast) |
+| `auto_paste` | `true` | paste at cursor after recognition (falls back to clipboard-only) |
+| `corrections` | `{}` | dictionary: `{"misheard word": "correct word"}` — applies instantly |
+| `auto_lang` | `false` | auto-detect Chinese/English (falls back to Chinese on failure) |
+| `add_punct` | `false` | rule-based punctuation (，。？) |
+
+Everything above is editable via **settings GUI** — no need to touch code.
+
+### Model
+
+Whisper model is **not bundled** (repo stays small). It is loaded from:
+1. `models/faster-whisper-<MODEL>/` (project-local, recommended)
+2. HuggingFace cache
+3. Online download (last resort; uses `HF_ENDPOINT` mirror if set)
+
+`convert_pt_to_ct2.py` converts the official OpenAI `small.pt` (from Azure CDN,
+no HuggingFace needed) to faster-whisper CTranslate2 format — offline-friendly
+for users in CN whose access to huggingface.co is rate-limited (429).
+
+---
+
+## Architecture
+
+```
+talk2clip.py       core: hotkey (pynput) → record (sounddevice) → transcribe (faster-whisper)
+                   → clipboard (pbcopy) → paste (Quartz CGEventPost / osascript fallback)
+settings.py        GUI: hotkey/model/dictionary/options (tkinter, stdlib)
+volume_bar.py      floating wave animation while recording (PyObjC, optional)
+convert_pt_to_ct2.py   .pt → CTranslate2 converter (for model prep)
+launchd/           LaunchAgent plist for login autostart
 ```
 
-- **快捷键**：右⌘ / 右⌥ / 右⌃ / F5 / 空格…（改后需重启 talk2clip）
-- **词库**：识别老错的词 → 正确的词，图形化增删，保存后立即生效（无需重启）
-- **选项**：模型选择（tiny/base/small/medium）、自动粘贴开关
+~1000 lines total, no HTTP server, no cloud service, no build step.
 
-配置存储于 `config.json`（热键/模型/词库，可直接编辑或经设置界面管理）。
+## Login autostart (optional)
+
+```bash
+cp launchd/com.charlie.talk2clip.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.charlie.talk2clip.plist
+```
+
+The LaunchAgent launches talk2clip *via Terminal* (so the hotkey/accessibility
+permission chain works — launching directly from launchd cannot receive key
+events on macOS 15) and auto-hides the Terminal window.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Hotkey does nothing | Check Input Monitoring has Terminal; restart talk2clip |
+| No auto-paste | Check Accessibility has Terminal + `/usr/bin/osascript`; watch terminal output for `⚠` |
+| Text pasted twice | Another instance is running — we guard with a pidfile; `pkill -f talk2clip.py` then start once |
+| Noise/traditional chars | Enable `auto_lang`, add words to `corrections`, or switch `model` to `medium` |
+| Model download 429 (CN) | Use Method A above (Azure CDN) + `convert_pt_to_ct2.py` |
+
+## License
+
+[MIT](LICENSE). Built on open sources: [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [sounddevice](https://python-sounddevice.readthedocs.io/), [pynput](https://github.com/moses-palmer/pynput), [rumps](https://github.com/jaredks/rumps), [opencc](https://github.com/siara-cc/OpenCC_zh). Whisper models belong to OpenAI (MIT-licensed weights per [openai/whisper](https://github.com/openai/whisper)).

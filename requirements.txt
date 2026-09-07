@@ -1,0 +1,8 @@
+numpy
+sounddevice
+faster-whisper
+pynput
+rumps
+pyobjc-framework-Cocoa
+pyobjc-framework-Quartz
+opencc-python-reimplemented
