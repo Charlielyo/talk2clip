@@ -11,3 +11,6 @@ config.json
 
 # macOS
 .DS_Store
+
+# 虚拟环境（install.sh 生成，不入库）
+.venv/
