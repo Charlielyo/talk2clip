@@ -55,7 +55,7 @@ curl -L -o /tmp/small.pt 'https://openaipublic.azureedge.net/main/whisper/models
 | Speak → text | Hold **right ⌘**, say something, release — text appears at cursor |
 | Change hotkey / model / dictionary | Double-click `打开设置.command` (or `./run.sh settings.py`) |
 | Start | Double-click **talk2clip.app** (in `/Applications`), `启动talk2clip.command`, or enable login-autostart (see below) |
-| Quit | `pkill -f talk2clip.py` |
+| Quit | menu-bar icon → Quit, or `./run.sh quit` |
 
 *Hotkey options: right ⌘ / right ⌥ / right ⌃ / right ⇧ / ⌘ / ⌥ / ⌃ / Space / F5-F20 (config.json `hotkey`).*
 
@@ -118,7 +118,7 @@ events on macOS 15) and auto-hides the Terminal window.
 |---|---|
 | Hotkey does nothing | Check Input Monitoring has Terminal; restart talk2clip |
 | No auto-paste | Check Accessibility has Terminal + `/usr/bin/osascript`; watch terminal output for `⚠` |
-| Text pasted twice | Another instance is running — we guard with a pidfile; `pkill -f talk2clip.py` then start once |
+| Text pasted twice | Another instance is running — we guard with a pidfile; quit via menu-bar icon or `./run.sh quit`, then start once |
 | Noise/traditional chars | Enable `auto_lang`, add words to `corrections`, or switch `model` to `medium` |
 | Model download 429 (CN) | Use Method A above (Azure CDN) + `convert_pt_to_ct2.py` |
 

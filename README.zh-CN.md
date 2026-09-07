@@ -55,7 +55,7 @@ curl -L -o /tmp/small.pt 'https://openaipublic.azureedge.net/main/whisper/models
 | 说话 → 出字 | 按住**右 ⌘**，说话，松开 — 文字出现在光标处 |
 | 改热键 / 模型 / 词库 | 双击 `打开设置.command`（或 `./run.sh settings.py`） |
 | 启动 | 双击 **talk2clip.app**（在 `/Applications`）/ `启动talk2clip.command` / 或开启开机自启（见下） |
-| 退出 | `pkill -f talk2clip.py` |
+| 退出 | 菜单栏图标 → 退出，或 `./run.sh quit` |
 
 *可选热键：右 ⌘ / 右 ⌥ / 右 ⌃ / 右 ⇧ / ⌘ / ⌥ / ⌃ / 空格 / F5-F20（config.json 的 `hotkey`）*
 
@@ -116,7 +116,7 @@ launchd 直接启动的进程收不到键盘事件），并自动隐藏终端窗
 |---|---|
 | 热键无反应 | 检查「输入监控」里有 Terminal；重启 talk2clip |
 | 不自动粘贴 | 检查「辅助功能」有 Terminal + `/usr/bin/osascript`；看终端 `⚠` 输出 |
-| 粘贴了两遍 | 有重複实例 — 已用 pidfile 防护；`pkill -f talk2clip.py` 后只启动一次 |
+| 粘贴了两遍 | 有重复实例 — 已用 pidfile 防护；先退出（菜单栏图标 → 退出，或 `./run.sh quit`），再只启动一次 |
 | 噪音/繁体字 | 开 `auto_lang`，词库加 `corrections`，或换 `medium` 模型 |
 | 模型下载 429（国内）| 用上面「方法 A」：Azure CDN + `convert_pt_to_ct2.py` |
 
