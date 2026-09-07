@@ -18,9 +18,37 @@ import threading
 import time
 import wave
 
-# ═══ 配置（写死的最小化配置，可自行修改）═══
-HK_MODS = ("option",)              # 热键修饰键（按住即可，无需额外组合）
-HK_KEY = "space"                  # 热键主键
+# ═══ 配置（config.json 持久化；缺失时用内置默认值）═══
+import json as _json
+_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+
+_DEFAULTS = {
+    "hotkey": "cmd_r",          # pynput Key 名: cmd_r=右⌘, alt_r=右Option, cmd=左⌘, space, f5...
+    "model": "small",           # 模型: tiny/base/small/medium
+    "beam_size": 5,
+    "auto_paste": True,         # 松手识别后自动粘贴到光标处
+    "corrections": {},          # 词库修正: {"错的词": "对的词"}
+}
+
+
+def load_config():
+    cfg = dict(_DEFAULTS)
+    try:
+        with open(_CONFIG_PATH, encoding="utf-8") as f:
+            cfg.update(_json.load(f))
+    except Exception:
+        pass
+    return cfg
+
+
+def save_config(cfg):
+    with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+        _json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+
+CFG = load_config()
+# 旧硬编码常量 → 改为从 CFG 读取（用于脚本各处引用，避免大规模改名）
+HK_KEY = CFG["hotkey"]
 RATE = 16000                      # 采样率
 MAX_SEC = 30                      # 最长录音
 SILENCE_SEC = 1.2                 # 静音多久自动停止
@@ -28,12 +56,12 @@ NOISE_THRESH = 0.015              # 开始说话的阈值
 SILENCE_THRESH = 0.008            # 静音阈值
 MIN_SEC = 0.3                     # 最短有效音频
 LANG = "zh"                       # whisper 语言
-MODEL = "small"                   # 模型大小: tiny/base/small/medium（越大越准越慢）
-BEAM_SIZE = 5                     # 解码搜索宽度，越大越准（5=准，1=快）
+MODEL = CFG["model"]              # 模型大小
+BEAM_SIZE = CFG["beam_size"]
 INITIAL_PROMPT = "以下是普通话的句子。"  # 提示词：减少繁体/英文误输出，提升中文倾向
 TO_SIMPLIFIED = True              # 繁体→简体（whisper 常输出繁体，opencc 转换）
 HF_ENDPOINT = "https://hf-mirror.com"  # HuggingFace 镜像（国内直连 huggingface.co 会 429）
-AUTO_PASTE = True                 # 松手识别后自动粘贴到光标处（需辅助功能授权；失败则仅剪贴板）
+AUTO_PASTE = CFG["auto_paste"]    # 松手识别后自动粘贴
 
 # ═══ 依赖导入（缺失时给出安装提示）═══
 try:
@@ -145,6 +173,15 @@ def transcribe(audio) -> str:
             text = _to_simplified(text)
         except Exception:
             pass  # opencc 不可用时保留原结果
+    # 词库修正：每次识别重读 config.json（设置界面保存后立即生效，无需重启）
+    try:
+        with open(_CONFIG_PATH, encoding="utf-8") as f:
+            corrections = _json.load(f).get("corrections", {})
+    except Exception:
+        corrections = {}
+    for wrong, right in corrections.items():
+        if wrong in text:
+            text = text.replace(wrong, right)
     return text
 
 
@@ -225,7 +262,7 @@ def stop_capture():
 
 recording = False
 
-# ═══ 热键（右 Command 按住说话；pynput 原生支持 Key.cmd_r 区分左右⌘）═══
+# ═══ 热键（config.json 指定键；pynput 原生支持左右区分）═══
 def start_hotkey():
     try:
         from pynput import keyboard
@@ -233,8 +270,7 @@ def start_hotkey():
         print("⚠ 缺少 pynput（pip install pynput）", flush=True)
         return None
 
-    key = keyboard.Key.cmd_r   # 右 Command（keycode 54）
-
+    key = getattr(keyboard.Key, HK_KEY, keyboard.Key.cmd_r)
     pressed = [False]
 
     def on_press(k):

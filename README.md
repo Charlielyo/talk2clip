@@ -1,6 +1,6 @@
 # talk2clip
 
-按住 `Option(⌥)+Space` 说话，松开自动转成文字并复制到剪贴板（macOS）。
+按住 `右 ⌘`（可在设置界面改）说话，松开自动转文字、进剪贴板并粘贴到光标处（macOS）。
 
 - 识别走本地 [faster-whisper](https://github.com/SYSTRAN/faster-whisper)（离线、免费、不限量）
 - 输出走 `pbcopy`（macOS 自带剪贴板，**无需任何权限**）
@@ -45,3 +45,15 @@ python3 talk2clip.py --once # 无界面：等一次按键后自动退出
   键盘监听请从**终端启动**（终端已授权「输入监控」即可继承），或手动给 python 添加「输入监控」权限。
 - 剪贴板写入不需要任何 TCC 权限——这是本设计的关键简化。
 - 启动热键时若看到 `This process is not trusted!` 警告，仍可先测菜单栏 🎙️ 方式。
+
+## 设置界面
+
+```bash
+python3 settings.py     # 打开设置窗口
+```
+
+- **快捷键**：右⌘ / 右⌥ / 右⌃ / F5 / 空格…（改后需重启 talk2clip）
+- **词库**：识别老错的词 → 正确的词，图形化增删，保存后立即生效（无需重启）
+- **选项**：模型选择（tiny/base/small/medium）、自动粘贴开关
+
+配置存储于 `config.json`（热键/模型/词库，可直接编辑或经设置界面管理）。

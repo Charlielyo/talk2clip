@@ -3,8 +3,9 @@
 cd "$(dirname "$0")"
 echo "==========================================="
 echo "  talk2clip 已启动"
-echo "  按住 右 ⌘ 键说话，松开自动粘贴到光标处"
+echo "  按住右 ⌘/⌥（可在设置中改）说话，松开自动粘贴"
 echo "  或点击菜单栏 🎙️ 图标"
+echo "  打开设置: ./settings.py   （词库/热键/选项）"
 echo "  关闭本窗口 = 退出程序"
 echo "==========================================="
 /Users/charlie/.hermes/hermes-agent/venv/bin/python3 talk2clip.py
