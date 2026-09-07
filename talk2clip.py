@@ -386,7 +386,21 @@ def start_menu():
     return True
 
 
+def _already_running():
+    """检测是否已有 talk2clip 实例在跑（单实例保护，避免重复粘贴）"""
+    try:
+        r = subprocess.run(["pgrep", "-f", "talk2clip.py"],
+                           capture_output=True, text=True)
+        pids = [int(p) for p in r.stdout.split() if p.strip()]
+        return any(p != os.getpid() for p in pids)
+    except Exception:
+        return False
+
+
 def main():
+    if _already_running():
+        print("ℹ️ 已有一个 talk2clip 在运行，本实例自动退出（避免重复粘贴）", flush=True)
+        sys.exit(0)
     listener = start_hotkey()
     if listener is None:
         print("⚠ 热键启动失败：请先给终端/python3 授权「输入监控」或「辅助功能」")
