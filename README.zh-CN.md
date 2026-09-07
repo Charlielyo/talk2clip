@@ -17,6 +17,9 @@
 
 无云端、无账号、数据不离开你的 Mac。
 
+<p align="center"><img src="docs/demo.gif" width="540" alt="talk2clip 演示"></p>
+
+
 ---
 
 ## 快速开始
@@ -63,6 +66,8 @@ curl -L -o /tmp/small.pt 'https://openaipublic.azureedge.net/main/whisper/models
 
 ## 功能与配置（`config.json`）
 
+<p align="center"><img src="docs/settings-ui.png" width="420" alt="设置界面"></p>
+
 | 配置项 | 默认值 | 含义 |
 |---|---|---|
 | `hotkey` | `cmd_r` | pynput 键名，如 `alt_r` = 右 Option |
@@ -89,8 +94,12 @@ Whisper 模型**不随仓库分发**（保持仓库轻量）。加载顺序：
 
 ## 架构
 
+<p align="center"><img src="docs/architecture.png" width="900" alt="架构图"></p>
+
 ```
 talk2clip.py       核心：热键(pynput) → 录音(sounddevice) → 识别(faster-whisper)
+
+：热键(pynput) → 录音(sounddevice) → 识别(faster-whisper)
                    → 剪贴板(pbcopy) → 粘贴(Quartz CGEventPost / osascript 回退)
 settings.py        设置界面：热键/模型/词库/选项（tkinter）
 volume_bar.py      录音时漂浮胶囊波形动画（PyObjC，40fps）

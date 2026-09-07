@@ -17,6 +17,9 @@ A lightweight, fully offline, privacy-friendly voice-to-text tool for macOS:
 
 No cloud, no account, no data leaves your Mac.
 
+<p align="center"><img src="docs/demo.gif" width="540" alt="talk2clip demo"></p>
+
+
 ---
 
 ## Quick start
@@ -63,6 +66,8 @@ curl -L -o /tmp/small.pt 'https://openaipublic.azureedge.net/main/whisper/models
 
 ## Features & config (`config.json`)
 
+<p align="center"><img src="docs/settings-ui.png" width="420" alt="settings GUI"></p>
+
 | Key | Default | Meaning |
 |---|---|---|
 | `hotkey` | `cmd_r` | pynput Key name, e.g. `alt_r` = right Option |
@@ -90,8 +95,12 @@ for users in CN whose access to huggingface.co is rate-limited (429).
 
 ## Architecture
 
+<p align="center"><img src="docs/architecture.png" width="900" alt="architecture"></p>
+
 ```
 talk2clip.py       core: hotkey (pynput) → record (sounddevice) → transcribe (faster-whisper)
+
+       core: hotkey (pynput) → record (sounddevice) → transcribe (faster-whisper)
                    → clipboard (pbcopy) → paste (Quartz CGEventPost / osascript fallback)
 settings.py        GUI: hotkey/model/dictionary/options (tkinter, stdlib)
 volume_bar.py      floating wave animation while recording (PyObjC, optional)
