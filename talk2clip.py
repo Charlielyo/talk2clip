@@ -28,6 +28,8 @@ _DEFAULTS = {
     "beam_size": 5,
     "auto_paste": True,         # 松手识别后自动粘贴到光标处
     "corrections": {},          # 词库修正: {"错的词": "对的词"}
+    "auto_lang": False,         # 中英文自动检测（False=按 LANG 固定中文）
+    "add_punct": False,         # 自动加标点（简单规则）
 }
 
 
@@ -55,9 +57,11 @@ SILENCE_SEC = 1.2                 # 静音多久自动停止
 NOISE_THRESH = 0.015              # 开始说话的阈值
 SILENCE_THRESH = 0.008            # 静音阈值
 MIN_SEC = 0.3                     # 最短有效音频
-LANG = "zh"                       # whisper 语言
+LANG = "zh"                       # whisper 语言（auto_lang=False 时用）
 MODEL = CFG["model"]              # 模型大小
 BEAM_SIZE = CFG["beam_size"]
+AUTO_LANG = CFG.get("auto_lang", False)   # 中英文自动检测
+ADD_PUNCT = CFG.get("add_punct", False)   # 自动加标点
 INITIAL_PROMPT = "以下是普通话的句子。"  # 提示词：减少繁体/英文误输出，提升中文倾向
 TO_SIMPLIFIED = True              # 繁体→简体（whisper 常输出繁体，opencc 转换）
 HF_ENDPOINT = "https://hf-mirror.com"  # HuggingFace 镜像（国内直连 huggingface.co 会 429）
@@ -127,6 +131,8 @@ def record_once():
     def cb(indata, frames, t, status):
         buf.append(indata.copy())
         rms = float(np.sqrt(np.mean(indata ** 2)))
+        if _VOLUME_BAR:
+            _VOLUME_BAR.update(min(1.0, rms * 8))   # 实时音量 → 悬浮条
         if rms > NOISE_THRESH:
             state["started"] = True
             state["silent_at"] = None
@@ -162,17 +168,28 @@ def to_wav_bytes(audio) -> bytes:
 
 
 def transcribe(audio) -> str:
-    # faster-whisper 原生接受 float32 numpy 数组（16kHz 单声道）
-    segs, _ = get_model().transcribe(
-        np.asarray(audio, dtype=np.float32).reshape(-1),
-        language=LANG, beam_size=BEAM_SIZE, vad_filter=True,
-        initial_prompt=INITIAL_PROMPT)
+    # 语言：自动检测（language=None）或固定中文；检测异常时回退中文
+    lang = None if AUTO_LANG else LANG
+    prompt = None if AUTO_LANG else INITIAL_PROMPT   # 自动检测时不用中文提示词（避免偏向）
+    try:
+        segs, _ = get_model().transcribe(
+            np.asarray(audio, dtype=np.float32).reshape(-1),
+            language=lang, beam_size=BEAM_SIZE, vad_filter=True,
+            initial_prompt=prompt)
+    except IndexError:
+        # 自动检测已知 edge case（短音频/无语音时 decode 为空），回退固定中文
+        segs, _ = get_model().transcribe(
+            np.asarray(audio, dtype=np.float32).reshape(-1),
+            language=LANG, beam_size=BEAM_SIZE, vad_filter=True,
+            initial_prompt=INITIAL_PROMPT)
     text = "".join(s.text for s in segs).strip()
     if TO_SIMPLIFIED:
         try:
             text = _to_simplified(text)
         except Exception:
             pass  # opencc 不可用时保留原结果
+    if ADD_PUNCT:
+        text = _add_punctuation(text)
     # 词库修正：每次识别重读 config.json（设置界面保存后立即生效，无需重启）
     try:
         with open(_CONFIG_PATH, encoding="utf-8") as f:
@@ -192,6 +209,45 @@ def _to_simplified(text: str) -> str:
         from opencc import OpenCC
         _opencc = OpenCC("t2s")
     return _opencc.convert(text)
+
+
+# 简单标点规则：句尾按疑问词判断 ? / 否则句号；按语气词/长度切分加逗号
+_QUESTION_WORDS = ("吗", "呢", "什么", "怎么", "为什么", "几", "多少", "哪", "谁",
+                   "能不能", "可不可以", "是不是", "有没有", "what", "how", "why")
+_PUNCT_OK = "，。、？！；：,.?!;:"
+
+
+def _add_punctuation(text: str) -> str:
+    """自动补标点（简单规则版）：切分句段 → 补逗号 → 句尾补 ?/。"""
+    import re
+    if not text:
+        return text
+    # 已有标点的保持
+    if text[-1] in _PUNCT_OK:
+        return text
+    # 按语气停顿切分：空格或长度超过 12 字（尽量在虚词后断）
+    segs = re.split(r"\s+", text)
+    if len(segs) <= 1:
+        # 单段超过 16 字，按逗号切：优先在虚词后断句
+        if len(text) > 16:
+            parts, buf = [], ""
+            last_break = -1
+            for i, ch in enumerate(text):
+                buf += ch
+                if ch in "的了是在对就还也都吧啊哦呢":
+                    last_break = len(buf) - 1
+                if len(buf) >= 14 and last_break >= 4:
+                    parts.append(buf[:last_break + 1])
+                    buf = buf[last_break + 1:]
+                    last_break = -1
+            if buf:
+                parts.append(buf)
+            text = "，".join(parts)
+    else:
+        text = "，".join(segs)
+    # 句尾：疑问词 → ？
+    q = any(w in text[-12:] for w in _QUESTION_WORDS)
+    return text + ("？" if q else "。")
 
 
 _opencc = None
@@ -232,11 +288,21 @@ def start_capture():
     threading.Thread(target=record_worker, daemon=True).start()
 
 
+# ═══ 音量悬浮条（录音时显示实时音量；无 PyObjC 时静默跳过）═══
+try:
+    import volume_bar as _vb
+    _VOLUME_BAR = _vb.VolumeBar()
+except Exception:
+    _VOLUME_BAR = None
+
+
 def record_worker():
     global recording
     if recording:
         return
     recording = True
+    if _VOLUME_BAR:
+        _VOLUME_BAR.show(0.0)
     try:
         audio = record_once()
         if audio is None:
@@ -252,6 +318,8 @@ def record_worker():
     except Exception as e:
         print(f"❌ 出错: {e}", flush=True)
     finally:
+        if _VOLUME_BAR:
+            _VOLUME_BAR.hide()
         recording = False
 
 

@@ -83,6 +83,12 @@ class App(tk.Tk):
         self.paste_var = tk.BooleanVar(value=self.cfg.get("auto_paste", True))
         ttk.Checkbutton(frm_opt, text="识别后自动粘贴到光标处",
                         variable=self.paste_var).pack(anchor="w", padx=12, pady=4)
+        self.lang_var = tk.BooleanVar(value=self.cfg.get("auto_lang", False))
+        ttk.Checkbutton(frm_opt, text="中英文自动检测（关=固定中文）",
+                        variable=self.lang_var).pack(anchor="w", padx=12, pady=4)
+        self.punct_var = tk.BooleanVar(value=self.cfg.get("add_punct", False))
+        ttk.Checkbutton(frm_opt, text="自动加标点（逗号/问号/句号）",
+                        variable=self.punct_var).pack(anchor="w", padx=12, pady=4)
         frm_model = ttk.Frame(frm_opt)
         frm_model.pack(fill="x", padx=12, pady=(4, 8))
         ttk.Label(frm_model, text="识别模型:").pack(side="left")
@@ -152,6 +158,8 @@ class App(tk.Tk):
         self.cfg["hotkey"] = self.hk_var.get()
         self.cfg["model"] = self.model_var.get()
         self.cfg["auto_paste"] = self.paste_var.get()
+        self.cfg["auto_lang"] = self.lang_var.get()
+        self.cfg["add_punct"] = self.punct_var.get()
         save(self.cfg)
         messagebox.showinfo(
             "已保存",
