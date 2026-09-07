@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/Users/charlie/.hermes/hermes-agent/venv/bin/python3
 """
 talk2clip — 轻量语音转文字（按住说话 → 识别 → 剪贴板）
 

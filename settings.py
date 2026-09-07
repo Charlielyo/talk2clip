@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/Users/charlie/.hermes/hermes-agent/venv/bin/python3
 """
 talk2clip 设置界面 — 热键 / 词库 / 选项
 
