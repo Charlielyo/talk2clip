@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""volume_bar.py — 录音波形指示（胶囊形态，40fps 高帧率）
+"""volume_bar.py — 录音波形指示（紧凑胶囊，40fps，独立线程驱动动画）
 
 设计：
-  - 半透明深色胶囊（圆角 = 窗口高度一半，永远不是方的）
-  - 21 根圆角波形柱，中心最高、两侧渐低（音频频谱经典形态）
-  - 每根柱相位错开跳动（abs(sin(t + i))），看起来像真实声波涌动
-  - 蓝紫渐变：中心亮蓝白 → 两侧紫；音量越大越亮、跳动幅度越大
-  - 双图层：外圈发光描边 + 内圈实心，制造光感
+  - 紧凑胶囊 170×46，半透明深色底，两端半圆
+  - 15 根圆角波形柱：中心最高、两侧渐低；每根相位错开涌动
+  - 蓝紫渐变 + 发光描边；音量越大越亮、跳动越猛
+  - 动画驱动：独立 daemon 线程 40fps → 主队列派发重绘
+    （不依赖 NSTimer/runloop，任何主循环环境都能动，rumps 下已验证可靠）
 
 用法（由 talk2clip 调用）:
     from volume_bar import VolumeBar
     bar = VolumeBar()
-    bar.show(0.2)    # 显示
-    bar.update(0.5)  # 更新音量 0~1
-    bar.hide()       # 消失
+    bar.show(0.2)   # 显示
+    bar.update(0.5) # 更新音量 0~1
+    bar.hide()      # 消失
 """
 import math
 import threading
@@ -26,15 +26,16 @@ try:
         NSApplication, NSWindow, NSColor, NSScreen, NSView,
         NSWindowStyleMaskBorderless, NSWindowCollectionBehaviorCanJoinAllSpaces,
         NSBackingStoreBuffered, NSStatusWindowLevel, NSBezierPath,
-        NSTimer, NSMakeRect)
+        NSMakeRect)
     _OK = True
 except ImportError:
     _OK = False
 
 _FPS = 40.0
-_WIDTH = 260.0       # 窗口宽（胶囊）
-_HEIGHT = 64.0       # 窗口高（圆角半径 = 32 → 两端半圆）
-_N_BARS = 21         # 波形柱数（奇数，中心有柱）
+WIDTH = 170.0
+HEIGHT = 46.0
+N_BARS = 15
+_MODE_KEY = "default"    # 'default' | 'thread'（线程驱动；default 亦可，实为线程驱动）
 
 
 class _WaveView(NSView):
@@ -53,42 +54,43 @@ class _WaveView(NSView):
         lv = self.level
         t = self.t
 
-        # 1) 半透明深色胶囊背景（衬托发光波形）
+        # 半透明深色胶囊背景
         NSColor.clearColor().setFill()
         NSBezierPath.fillRect_(rect)
-        NSColor.colorWithCalibratedWhite_alpha_(0.10, 0.38).setFill()
+        NSColor.colorWithCalibratedWhite_alpha_(0.08, 0.42).setFill()
         NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
             NSMakeRect(1, 1, w - 2, h - 2), h / 2 - 1, h / 2 - 1).fill()
 
-        # 2) 波形柱
-        n = _N_BARS
-        bar_w = 4.5
-        gap = 6.0
+        n = N_BARS
+        bar_w = 3.6
+        gap = 6.5
         total = n * bar_w + (n - 1) * gap
         x0 = cx - total / 2
         center_idx = (n - 1) / 2
-        max_h = h * 0.42           # 最大半高（柱从中线向上下对称伸展）
+        max_h = h * 0.40
 
         for i in range(n):
-            d = abs(i - center_idx) / center_idx                      # 0中心 → 1边缘
-            falloff = 0.30 + 0.70 * math.cos(d * math.pi / 2)         # 中心最高，两侧渐低
-            wave = abs(math.sin(t + i * 0.85))                        # 相位错开跳动
-            amp = lv * falloff * (0.20 + 0.80 * wave)
-            bh = max(2.0, max_h * amp)                               # 柱半高
+            d = abs(i - center_idx) / center_idx
+            falloff = 0.28 + 0.72 * math.cos(d * math.pi / 2)
+            # 涌动：不同频率快慢叠加，避免单调
+            wave = 0.45 + 0.55 * abs(
+                math.sin(t * 1.0 + i * 0.9) * 0.65 +
+                math.sin(t * 2.3 + i * 1.7) * 0.35)
+            amp = lv * falloff * wave
+            bh = max(1.5, max_h * amp)
             x = x0 + i * (bar_w + gap)
 
-            # 颜色：中心亮蓝白 → 两侧紫；音量越大越亮
             hue_t = 1.0 - d
-            r = 0.30 + 0.62 * hue_t * (0.45 + 0.55 * lv)
-            g = 0.58 + 0.40 * hue_t
+            r = 0.32 + 0.60 * hue_t * (0.45 + 0.55 * lv)
+            g = 0.60 + 0.38 * hue_t
             b = 1.0
-            alpha = 0.50 + 0.50 * lv
+            alpha = 0.45 + 0.55 * lv
 
-            # 发光层（外圈，低透明度）
-            NSColor.colorWithCalibratedRed_green_blue_alpha_(r, g, b, alpha * 0.32).setFill()
+            # 发光层
+            NSColor.colorWithCalibratedRed_green_blue_alpha_(r, g, b, alpha * 0.30).setFill()
             NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
-                NSMakeRect(x - 1.5, cy - bh - 1.5, bar_w + 3, bh * 2 + 3),
-                (bar_w + 3) / 2, (bar_w + 3) / 2).fill()
+                NSMakeRect(x - 1.2, cy - bh - 1.2, bar_w + 2.4, bh * 2 + 2.4),
+                (bar_w + 2.4) / 2, (bar_w + 2.4) / 2).fill()
             # 实心层
             NSColor.colorWithCalibratedRed_green_blue_alpha_(r, g, b, alpha).setFill()
             NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
@@ -96,21 +98,21 @@ class _WaveView(NSView):
 
 
 class VolumeBar:
-    """胶囊波形指示：录音时显示，结束隐藏"""
+    """紧凑胶囊波形：录音时显示，结束隐藏；40fps 线程驱动"""
 
-    def __init__(self, margin_top=100):
+    def __init__(self, margin_top=90):
         if not _OK:
             self._window = None
             self._view = None
-            self._timer = None
+            self._alive = False
             return
         app = NSApplication.sharedApplication()
         screen = NSScreen.mainScreen().frame()
-        x = (screen.size.width - _WIDTH) / 2
-        y = screen.size.height - margin_top - _HEIGHT
+        x = (screen.size.width - WIDTH) / 2
+        y = screen.size.height - margin_top - HEIGHT
 
         self._window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            NSMakeRect(x, y, _WIDTH, _HEIGHT),
+            NSMakeRect(x, y, WIDTH, HEIGHT),
             NSWindowStyleMaskBorderless,
             NSBackingStoreBuffered,
             False)
@@ -120,25 +122,31 @@ class VolumeBar:
         self._window.setHasShadow_(False)
         self._window.setCollectionBehavior_(NSWindowCollectionBehaviorCanJoinAllSpaces)
 
-        self._view = _WaveView.alloc().initWithFrame_(NSMakeRect(0, 0, _WIDTH, _HEIGHT))
+        self._view = _WaveView.alloc().initWithFrame_(NSMakeRect(0, 0, WIDTH, HEIGHT))
         self._window.setContentView_(self._view)
 
         self._level = 0.0
         self._lock = threading.Lock()
         self._t0 = time.time()
+        self._alive = True
 
-        # 40fps 动画（仅窗口可见时重绘）
-        self._timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            1 / _FPS, self, "tick:", None, True)
-        self._timer.retain()
+        # 独立线程驱动 40fps（不依赖 runloop/NSTimer —— rumps 环境 NSTimer 不触发）
+        threading.Thread(target=self._loop, daemon=True,
+                         name="volume-bar-anim").start()
 
-    def tick_(self, _t):
-        if self._window.isVisible():
-            with self._lock:
-                lv = self._level
-            self._view.set_level(lv)
-            self._view.t = (time.time() - self._t0) * 2.4   # 波形涌动速度
-            self._view.setNeedsDisplay_(True)
+    def _loop(self):
+        while self._alive:
+            try:
+                with self._lock:
+                    lv = self._level
+                if self._window.isVisible():
+                    self._view.level = lv
+                    self._view.t = (time.time() - self._t0) * 2.6
+                    # Cocoa UI 调用必须在主线程 → 主队列派发重绘
+                    self._run_on_main(lambda: self._view.setNeedsDisplay_(True))
+            except Exception:
+                pass
+            time.sleep(1 / _FPS)
 
     # ── 线程安全接口 ──
     def show(self, level=0.0):
