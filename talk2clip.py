@@ -260,7 +260,29 @@ def copy_to_clipboard(text: str):
 
 
 def paste_at_cursor():
-    """把剪贴板内容粘贴到当前光标处（Cmd+V，需终端/进程有辅助功能授权）"""
+    """把剪贴板内容粘贴到当前光标处（Cmd+V）
+
+    双路径：
+      1) Quartz CGEventPost 直接发按键事件（talk2clip 进程内，继承终端权限）
+      2) osascript keystroke（回退；自启链路下 macOS 15 TCC 可能拒绝）
+    """
+    # 路径1: CGEventPost（优先，同一进程权限更可靠）
+    try:
+        from Quartz import (CGEventCreateKeyboardEvent, CGEventPost,
+                            kCGHIDEventTap, CGEventSetFlags,
+                            kCGEventFlagMaskCommand, CGEventCreate)
+        ev_down = CGEventCreateKeyboardEvent(None, 9, True)    # 9 = 'v'
+        if ev_down:
+            CGEventSetFlags(ev_down, kCGEventFlagMaskCommand)
+            CGEventPost(kCGHIDEventTap, ev_down)
+        ev_up = CGEventCreateKeyboardEvent(None, 9, False)
+        if ev_up:
+            CGEventSetFlags(ev_up, kCGEventFlagMaskCommand)
+            CGEventPost(kCGHIDEventTap, ev_up)
+        return True
+    except Exception as e:
+        print(f"CGEventPost 粘贴失败({e})，回退 osascript…", flush=True)
+    # 路径2: osascript 回退
     try:
         r = subprocess.run(
             ["osascript", "-e",
@@ -386,21 +408,49 @@ def start_menu():
     return True
 
 
+_PID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".talk2clip.pid")
+
+
 def _already_running():
-    """检测是否已有 talk2clip 实例在跑（单实例保护，避免重复粘贴）"""
+    """单实例保护：pidfile 检测（比 pgrep 可靠，不误匹配父 shell 命令行）"""
     try:
-        r = subprocess.run(["pgrep", "-f", "talk2clip.py"],
-                           capture_output=True, text=True)
-        pids = [int(p) for p in r.stdout.split() if p.strip()]
-        return any(p != os.getpid() for p in pids)
+        with open(_PID_FILE, encoding="utf-8") as f:
+            old_pid = int(f.read().strip())
+        if old_pid != os.getpid() and _pid_alive(old_pid):
+            return True
     except Exception:
+        pass
+    return False
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, ProcessLookupError):
         return False
+
+
+def _write_pidfile():
+    try:
+        with open(_PID_FILE, "w", encoding="utf-8") as f:
+            f.write(str(os.getpid()))
+    except Exception:
+        pass
 
 
 def main():
     if _already_running():
         print("ℹ️ 已有一个 talk2clip 在运行，本实例自动退出（避免重复粘贴）", flush=True)
         sys.exit(0)
+    _write_pidfile()
+    # 权限自检：辅助功能（决定粘贴）与键盘监听能力
+    try:
+        import ApplicationServices as AS
+        trusted = AS.AXIsProcessTrusted()
+        print(f"🔍 权限自检: 辅助功能(Accessibility)={'✅' if trusted else '❌'}", flush=True)
+    except Exception as e:
+        print(f"🔍 权限自检无法执行: {e}", flush=True)
     listener = start_hotkey()
     if listener is None:
         print("⚠ 热键启动失败：请先给终端/python3 授权「输入监控」或「辅助功能」")
