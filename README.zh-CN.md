@@ -53,7 +53,7 @@ curl -L -o /tmp/small.pt 'https://openaipublic.azureedge.net/main/whisper/models
 | 操作 | 方式 |
 |---|---|
 | 说话 → 出字 | 按住**右 ⌘**，说话，松开 — 文字出现在光标处 |
-| 改热键 / 模型 / 词库 | 双击 `打开设置.command`（或 `python3 settings.py`） |
+| 改热键 / 模型 / 词库 | 双击 `打开设置.command`（或 `./run.sh settings.py`） |
 | 启动 | 双击 **talk2clip.app**（在 `/Applications`）/ `启动talk2clip.command` / 或开启开机自启（见下） |
 | 退出 | `pkill -f talk2clip.py` |
 

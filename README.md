@@ -53,7 +53,7 @@ curl -L -o /tmp/small.pt 'https://openaipublic.azureedge.net/main/whisper/models
 | Action | How |
 |---|---|
 | Speak → text | Hold **right ⌘**, say something, release — text appears at cursor |
-| Change hotkey / model / dictionary | Double-click `打开设置.command` (or `python3 settings.py`) |
+| Change hotkey / model / dictionary | Double-click `打开设置.command` (or `./run.sh settings.py`) |
 | Start | Double-click **talk2clip.app** (in `/Applications`), `启动talk2clip.command`, or enable login-autostart (see below) |
 | Quit | `pkill -f talk2clip.py` |
 
