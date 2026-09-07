@@ -1,6 +1,8 @@
 # talk2clip 🎙️📋
 
 **Hold right ⌘, speak, release — text lands in your cursor.**
+
+[English](README.md) | [中文](README.zh-CN.md)
 *(macOS 按住说话 → 本地离线语音识别 → 自动粘贴到光标处)*
 
 A lightweight, fully offline, privacy-friendly voice-to-text tool for macOS:
@@ -8,7 +10,7 @@ A lightweight, fully offline, privacy-friendly voice-to-text tool for macOS:
 - 🔥 **Single action**: hold **right ⌘** (or any key you choose) → speak → release → text is inserted at your cursor
 - 🧠 **Local AI recognition** via [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — offline, free, unlimited, no cloud, no API keys
 - 📋 **Clipboard + auto-paste**: text is copied and pasted automatically
-- 🌊 **Visual feedback**: floating wave-bar shows live volume while you speak
+- 🌊 **Visual feedback**: floating capsule audio-wave (40fps) shows live volume while you speak
 - 🇨🇳↔🇬🇧 **Auto language detect** (optional), **auto punctuation** (optional), **correction dictionary**
 - 🖥️ **Settings GUI**: hotkey / model / dictionary / options, all clickable
 - 🚀 **Launch at login** (optional, via LaunchAgent)
@@ -24,7 +26,7 @@ git clone <this-repo> talk2clip && cd talk2clip
 ./install.sh          # creates .venv, installs deps, writes config.json
 ```
 
-Then **download the model** (~250 MB, one-time, see [Model](#model)):
+Then **download the model** (`.pt` 483MB → converted `model.bin` 247MB, one-time; see [Model](#model)):
 
 ```bash
 # Method A — from Azure CDN (works in CN & anywhere):
@@ -43,7 +45,7 @@ curl -L -o /tmp/small.pt 'https://openaipublic.azureedge.net/main/whisper/models
 | 辅助功能 | System Settings → Privacy & Security → **Accessibility** | Terminal + `/usr/bin/osascript` (so auto-paste works) |
 
 > **macOS 15 note**: permission for CLI binaries is glitchy (adds but doesn't apply).
-> Run via **Terminal** (`./启动talk2clip.command` or `python3 talk2clip.py`) and grant
+> Run via **Terminal** (`./启动talk2clip.command` or `./run.sh`) and grant
 > **Terminal** itself — the child process inherits it. This is the supported path.
 
 ### Usage
@@ -52,7 +54,7 @@ curl -L -o /tmp/small.pt 'https://openaipublic.azureedge.net/main/whisper/models
 |---|---|
 | Speak → text | Hold **right ⌘**, say something, release — text appears at cursor |
 | Change hotkey / model / dictionary | Double-click `打开设置.command` (or `python3 settings.py`) |
-| Start | Double-click `启动talk2clip.command`, or enable login-autostart (see below) |
+| Start | Double-click **talk2clip.app** (in `/Applications`), `启动talk2clip.command`, or enable login-autostart (see below) |
 | Quit | `pkill -f talk2clip.py` |
 
 *Hotkey options: right ⌘ / right ⌥ / right ⌃ / right ⇧ / ⌘ / ⌥ / ⌃ / Space / F5-F20 (config.json `hotkey`).*
