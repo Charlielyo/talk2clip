@@ -100,8 +100,6 @@ Whisper 模型**不随仓库分发**（保持仓库轻量）。加载顺序：
 
 ```
 talk2clip.py       核心：热键(pynput) → 录音(sounddevice) → 识别(faster-whisper)
-
-：热键(pynput) → 录音(sounddevice) → 识别(faster-whisper)
                    → 剪贴板(pbcopy) → 粘贴(Quartz CGEventPost / osascript 回退)
 settings.py        设置界面：热键/模型/词库/选项（tkinter）
 volume_bar.py      录音时漂浮胶囊波形动画（PyObjC，40fps）
@@ -130,6 +128,11 @@ launchd 直接启动的进程收不到键盘事件），并自动隐藏终端窗
 | 粘贴了两遍 | 有重复实例 — 已用 pidfile 防护；先退出（菜单栏图标 → 退出，或 `./run.sh quit`），再只启动一次 |
 | 噪音/繁体字 | 开 `auto_lang`，词库加 `corrections`，或换 `medium` 模型 |
 | 模型下载 429（国内）| 用上面「方法 A」：Azure CDN + `convert_pt_to_ct2.py` |
+
+
+## 相关文章
+
+- [macOS 15 辅助功能授权添加了却不生效？一次排查记录](https://sodebug.com/macos15-accessibility-permission/) — 项目开发中踩坑的全程记录
 
 ## License
 

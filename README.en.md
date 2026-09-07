@@ -133,6 +133,11 @@ events on macOS 15) and auto-hides the Terminal window.
 | Noise/traditional chars | Enable `auto_lang`, add words to `corrections`, or switch `model` to `medium` |
 | Model download 429 (CN) | Use Method A above (Azure CDN) + `convert_pt_to_ct2.py` |
 
+
+## Related article
+
+- [macOS 15 Accessibility permission: added but not working?](https://sodebug.com/macos15-accessibility-permission/) — full debugging record from this project
+
 ## License
 
 [MIT](LICENSE). Built on open sources: [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [sounddevice](https://python-sounddevice.readthedocs.io/), [pynput](https://github.com/moses-palmer/pynput), [rumps](https://github.com/jaredks/rumps), [opencc](https://github.com/siara-cc/OpenCC_zh). Whisper models belong to OpenAI (MIT-licensed weights per [openai/whisper](https://github.com/openai/whisper)).
