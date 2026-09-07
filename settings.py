@@ -66,15 +66,18 @@ class App(tk.Tk):
         frm_hk = ttk.Frame(self)
         frm_hk.pack(fill="x", padx=24)
         ttk.Label(frm_hk, text="选择快捷键:").grid(row=0, column=0, sticky="w")
-        self.hk_var = tk.StringVar(value=self.cfg.get("hotkey", "cmd_r"))
+        # 初始值：config 键名 → 显示格式（"cmd_r" → "cmd_r（右 ⌘ (Command)）"）
+        raw_hk = self.cfg.get("hotkey", "cmd_r")
+        hk_display = next((f"{n}（{label}）" for n, label in HOTKEYS if n == raw_hk), raw_hk)
+        self.hk_var = tk.StringVar(value=hk_display)
         hk_box = ttk.Combobox(frm_hk, textvariable=self.hk_var, state="readonly", width=24)
-        hk_box["values"] = [n for n, _ in HOTKEYS]
+        hk_box["values"] = [f"{n}（{label}）" for n, label in HOTKEYS]
         hk_box.grid(row=0, column=1, padx=8, pady=4)
         self.hk_label = ttk.Label(frm_hk, text="", foreground="#888")
         self.hk_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 4))
         self._update_hk_label()
 
-        btn = ttk.Button(self, text="💾 保存设置", command=self.save_settings)
+        btn = ttk.Button(self, text="保存设置", command=self.save_settings)
         btn.pack(pady=(6, 10), fill="x", padx=12)
 
         # ── 选项区 ──
@@ -109,7 +112,7 @@ class App(tk.Tk):
         ttk.Label(frm_add, text="→ 对的:").pack(side="left")
         self.right_var = tk.StringVar()
         ttk.Entry(frm_add, textvariable=self.right_var, width=14).pack(side="left", padx=4)
-        ttk.Button(frm_add, text="➕ 添加", command=self.add_correction).pack(side="left", padx=4)
+        ttk.Button(frm_add, text="添加", command=self.add_correction).pack(side="left", padx=4)
 
         self.tree = ttk.Treeview(frm_dict, columns=("wrong", "right"), show="headings", height=8)
         self.tree.heading("wrong", text="识别错的词")
@@ -118,13 +121,14 @@ class App(tk.Tk):
         self.tree.column("right", width=200)
         self.tree.pack(fill="both", expand=True, padx=8, pady=4)
 
-        btn_del = ttk.Button(frm_dict, text="🗑 删除选中", command=self.delete_correction)
+        btn_del = ttk.Button(frm_dict, text="删除选中", command=self.delete_correction)
         btn_del.pack(pady=(0, 6))
 
         self._refresh_corrections()
 
     def _update_hk_label(self):
-        name = self.hk_var.get()
+        v = self.hk_var.get()
+        name = v.split("（")[0].strip()   # 从 "cmd_r（右 ⌘ (Command)）" 提取键名
         self.hk_label.config(text=f"当前: {HOTKEY_NAMES.get(name, name)}（热键改变需重启 talk2clip 生效）")
 
     def _refresh_corrections(self):
@@ -155,7 +159,7 @@ class App(tk.Tk):
         self._refresh_corrections()
 
     def save_settings(self):
-        self.cfg["hotkey"] = self.hk_var.get()
+        self.cfg["hotkey"] = self.hk_var.get().split("（")[0].strip()   # 只存键名
         self.cfg["model"] = self.model_var.get()
         self.cfg["auto_paste"] = self.paste_var.get()
         self.cfg["auto_lang"] = self.lang_var.get()
